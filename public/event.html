@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Event details - VenueBook</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="nav" id="site-nav"></header>
+
+<main class="container">
+  <div id="event-detail-container">
+    <p style="margin-top:40px;">Loading event...</p>
+  </div>
+</main>
+
+<footer class="site-footer">VenueBook &middot; a full-stack event booking demo</footer>
+
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+  renderNav('home');
+
+  const params = new URLSearchParams(window.location.search);
+  const eventId = params.get('id');
+  let currentEvent = null;
+
+  function bookingBoxHtml(ev) {
+    const soldOut = ev.available_seats <= 0;
+    const user = getUser();
+    return `
+      <div class="booking-box">
+        <div class="price-row">
+          <span class="amount">${formatPrice(ev.price)}</span>
+          <span style="color:var(--stone); font-size:0.85rem;">per seat</span>
+        </div>
+        <p class="seats-left">${soldOut ? 'Sold out' : ev.available_seats + ' of ' + ev.total_seats + ' seats available'}</p>
+
+        <div id="booking-alert"></div>
+
+        ${soldOut ? `
+          <button class="btn btn-block" disabled>Sold out</button>
+        ` : `
+          <label for="seat-count">Number of seats</label>
+          <input type="number" id="seat-count" min="1" max="${ev.available_seats}" value="1">
+          <button class="btn btn-gold btn-block" id="book-btn" style="margin-top:16px;">
+            ${user ? 'Book now' : 'Log in to book'}
+          </button>
+        `}
+      </div>
+    `;
+  }
+
+  function detailHtml(ev) {
+    return `
+      <div class="event-detail">
+        <div>
+          <span class="ticket-tag">${ev.category}</span>
+          <h1>${ev.title}</h1>
+          <p>${ev.description || 'No description provided for this event yet.'}</p>
+          <ul class="event-facts">
+            <li><span class="k">Date</span><span>${formatDate(ev.event_date)}</span></li>
+            <li><span class="k">Venue</span><span>${ev.venue}</span></li>
+            <li><span class="k">Price</span><span>${formatPrice(ev.price)}</span></li>
+          </ul>
+        </div>
+        <div id="booking-box-slot"></div>
+      </div>
+    `;
+  }
+
+  async function loadEvent() {
+    const container = document.getElementById('event-detail-container');
+    if (!eventId) {
+      container.innerHTML = '<div class="alert alert-error">No event specified.</div>';
+      return;
+    }
+    try {
+      const data = await apiFetch(`/events/${eventId}`);
+      currentEvent = data.event;
+      container.innerHTML = detailHtml(currentEvent);
+      document.getElementById('booking-box-slot').innerHTML = bookingBoxHtml(currentEvent);
+      attachBookHandler();
+    } catch (err) {
+      container.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  function attachBookHandler() {
+    const btn = document.getElementById('book-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', async () => {
+      if (!getToken()) {
+        window.location.href = `login.html?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+        return;
+      }
+
+      const seatCount = parseInt(document.getElementById('seat-count').value, 10);
+      const alertBox = document.getElementById('booking-alert');
+      alertBox.innerHTML = '';
+      btn.disabled = true;
+      btn.textContent = 'Booking...';
+
+      try {
+        const data = await apiFetch('/bookings', {
+          method: 'POST',
+          body: JSON.stringify({ event_id: currentEvent.id, num_seats: seatCount })
+        });
+        window.location.href = `my-bookings.html?justBooked=${data.booking.ticket_id}`;
+      } catch (err) {
+        alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = 'Book now';
+        loadEvent(); // refresh seat count in case someone else just booked
+      }
+    });
+  }
+
+  loadEvent();
+</script>
+</body>
+</html>

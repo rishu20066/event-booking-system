@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manage events - VenueBook</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="nav" id="site-nav"></header>
+
+<main class="container">
+  <div class="admin-layout">
+    <div class="admin-panel">
+      <h2 id="form-title">New event</h2>
+      <div id="form-alert"></div>
+      <form id="event-form">
+        <input type="hidden" id="event-id">
+
+        <label for="title">Title</label>
+        <input type="text" id="title" required>
+
+        <label for="description">Description</label>
+        <textarea id="description"></textarea>
+
+        <div class="two-col">
+          <div>
+            <label for="category">Category</label>
+            <select id="category">
+              <option value="workshop">Workshop</option>
+              <option value="concert">Concert</option>
+              <option value="meetup">Meetup</option>
+              <option value="fest">Fest</option>
+              <option value="general">General</option>
+            </select>
+          </div>
+          <div>
+            <label for="price">Price (₹, 0 = free)</label>
+            <input type="number" id="price" min="0" value="0">
+          </div>
+        </div>
+
+        <label for="venue">Venue</label>
+        <input type="text" id="venue" required>
+
+        <label for="event_date">Date & time</label>
+        <input type="datetime-local" id="event_date" required>
+
+        <label for="total_seats">Total seats</label>
+        <input type="number" id="total_seats" min="1" required>
+
+        <button type="submit" class="btn btn-gold btn-block" style="margin-top:22px;" id="submit-btn">Create event</button>
+        <button type="button" class="btn btn-outline btn-block" style="margin-top:10px; display:none;" id="cancel-edit-btn">Cancel edit</button>
+      </form>
+    </div>
+
+    <div>
+      <h2>Your events</h2>
+      <div id="events-list">
+        <p>Loading...</p>
+      </div>
+      <div id="attendees-slot"></div>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">VenueBook &middot; a full-stack event booking demo</footer>
+
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+  renderNav('admin');
+  if (!requireAdminPage()) { /* redirected */ }
+
+  const form = document.getElementById('event-form');
+  const cancelEditBtn = document.getElementById('cancel-edit-btn');
+
+  function resetForm() {
+    form.reset();
+    document.getElementById('event-id').value = '';
+    document.getElementById('form-title').textContent = 'New event';
+    document.getElementById('submit-btn').textContent = 'Create event';
+    cancelEditBtn.style.display = 'none';
+  }
+
+  cancelEditBtn.addEventListener('click', resetForm);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const alertBox = document.getElementById('form-alert');
+    alertBox.innerHTML = '';
+
+    const id = document.getElementById('event-id').value;
+    const payload = {
+      title: document.getElementById('title').value.trim(),
+      description: document.getElementById('description').value.trim(),
+      category: document.getElementById('category').value,
+      price: parseFloat(document.getElementById('price').value) || 0,
+      venue: document.getElementById('venue').value.trim(),
+      event_date: document.getElementById('event_date').value,
+      total_seats: parseInt(document.getElementById('total_seats').value, 10)
+    };
+
+    try {
+      if (id) {
+        await apiFetch(`/events/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      } else {
+        await apiFetch('/events', { method: 'POST', body: JSON.stringify(payload) });
+      }
+      resetForm();
+      loadEvents();
+    } catch (err) {
+      alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  });
+
+  function editEvent(ev) {
+    document.getElementById('event-id').value = ev.id;
+    document.getElementById('title').value = ev.title;
+    document.getElementById('description').value = ev.description || '';
+    document.getElementById('category').value = ev.category;
+    document.getElementById('price').value = ev.price;
+    document.getElementById('venue').value = ev.venue;
+    document.getElementById('event_date').value = ev.event_date.slice(0, 16);
+    document.getElementById('total_seats').value = ev.total_seats;
+    document.getElementById('form-title').textContent = 'Edit event';
+    document.getElementById('submit-btn').textContent = 'Save changes';
+    cancelEditBtn.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function deleteEvent(id) {
+    if (!confirm('Delete this event? This also removes its bookings.')) return;
+    try {
+      await apiFetch(`/events/${id}`, { method: 'DELETE' });
+      loadEvents();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function viewAttendees(id, title) {
+    const slot = document.getElementById('attendees-slot');
+    slot.innerHTML = '<p>Loading attendees...</p>';
+    try {
+      const data = await apiFetch(`/events/${id}/attendees`);
+      if (data.attendees.length === 0) {
+        slot.innerHTML = `<h2>Attendees &middot; ${title}</h2><div class="empty-state">No bookings yet for this event.</div>`;
+        return;
+      }
+      slot.innerHTML = `
+        <h2>Attendees &middot; ${title}</h2>
+        ${data.attendees.map(a => `
+          <div class="admin-list-row">
+            <div>
+              <strong>${a.name}</strong>
+              <div class="meta">${a.email} &middot; ${a.num_seats} seat(s) &middot; ${a.ticket_id}</div>
+            </div>
+            <span class="status ${a.status}">${a.status}</span>
+          </div>
+        `).join('')}
+      `;
+      slot.scrollIntoView({ behavior: 'smooth' });
+    } catch (err) {
+      slot.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  function eventRowHtml(ev) {
+    return `
+      <div class="admin-list-row">
+        <div>
+          <strong>${ev.title}</strong>
+          <div class="meta">${formatDate(ev.event_date)} &middot; ${ev.available_seats}/${ev.total_seats} seats left &middot; ${formatPrice(ev.price)}</div>
+        </div>
+        <div class="row-actions">
+          <button onclick='viewAttendees(${ev.id}, ${JSON.stringify(ev.title)})'>Attendees</button>
+          <button onclick='editEvent(${JSON.stringify(ev).replace(/'/g, "&apos;")})'>Edit</button>
+          <button class="danger" onclick="deleteEvent(${ev.id})">Delete</button>
+        </div>
+      </div>
+    `;
+  }
+
+  async function loadEvents() {
+    const container = document.getElementById('events-list');
+    try {
+      const data = await apiFetch('/events');
+      if (data.events.length === 0) {
+        container.innerHTML = '<div class="empty-state">No events yet. Create your first one on the left.</div>';
+        return;
+      }
+      container.innerHTML = data.events.map(eventRowHtml).join('');
+    } catch (err) {
+      container.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  loadEvents();
+</script>
+</body>
+</html>

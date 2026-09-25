@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My tickets - VenueBook</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="nav" id="site-nav"></header>
+
+<main class="container" style="padding-top:40px; padding-bottom:72px;">
+  <h1>My tickets</h1>
+  <p>Everything you've booked, in one place.</p>
+
+  <div id="justbooked-slot"></div>
+  <div id="qr-slot"></div>
+  <div id="bookings-container" style="margin-top:24px;">
+    <p>Loading your bookings...</p>
+  </div>
+</main>
+
+<footer class="site-footer">VenueBook &middot; a full-stack event booking demo</footer>
+
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+  renderNav('bookings');
+  if (!requireLogin('my-bookings.html')) { /* redirected */ }
+
+  function rowHtml(b) {
+    return `
+      <div class="booking-row">
+        <div class="info">
+          <span class="status ${b.status}">${b.status}</span>
+          <h3 style="margin-top:8px;">${b.title}</h3>
+          <p class="ticket-meta">${formatDate(b.event_date)} &middot; ${b.venue}</p>
+          <p class="ticket-meta">${b.num_seats} seat(s) &middot; Ticket ${b.ticket_id}</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-outline" style="padding:8px; font-size:0.82rem;" onclick="showQr(${b.id})">View QR</button>
+          ${b.status === 'confirmed'
+            ? `<button class="btn btn-danger" style="padding:8px; font-size:0.82rem;" onclick="cancelBooking(${b.id})">Cancel</button>`
+            : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  async function loadBookings() {
+    const container = document.getElementById('bookings-container');
+    try {
+      const data = await apiFetch('/bookings/mine');
+      if (data.bookings.length === 0) {
+        container.innerHTML = '<div class="empty-state">No bookings yet. <a href="index.html">Browse events</a> to book your first seat.</div>';
+        return;
+      }
+      container.innerHTML = data.bookings.map(rowHtml).join('');
+    } catch (err) {
+      container.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  async function cancelBooking(id) {
+    if (!confirm('Cancel this booking? Your seat(s) will be released.')) return;
+    try {
+      await apiFetch(`/bookings/${id}/cancel`, { method: 'PUT' });
+      loadBookings();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function showQr(id) {
+    const slot = document.getElementById('qr-slot');
+    slot.innerHTML = '<p>Loading ticket...</p>';
+    try {
+      const data = await apiFetch(`/bookings/${id}/qrcode`);
+      slot.innerHTML = `
+        <div class="confirm-ticket">
+          <div class="top">
+            <h3>Your ticket</h3>
+            <p style="color:#D9D5E8; margin:0;">Show this QR code at entry</p>
+          </div>
+          <div class="bottom">
+            <span class="code">${data.ticket_id}</span>
+            <img src="${data.qrcode}" alt="QR code for ${data.ticket_id}">
+          </div>
+        </div>
+      `;
+      slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (err) {
+      slot.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  // If we just came from booking an event, greet + show its QR right away
+  const params = new URLSearchParams(window.location.search);
+  const justBooked = params.get('justBooked');
+  if (justBooked) {
+    document.getElementById('justbooked-slot').innerHTML =
+      `<div class="alert alert-success">Booking confirmed! Your ticket ${justBooked} is ready below.</div>`;
+  }
+
+  loadBookings();
+</script>
+</body>
+</html>

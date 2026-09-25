@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VenueBook - Find and book events</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="nav" id="site-nav"></header>
+
+<section class="hero">
+  <div class="container">
+    <h1>Find your next event.<br>Book a seat in seconds.</h1>
+    <p>Workshops, fests, meetups and shows near you — with real-time seat availability, so you never lose your spot to a full house.</p>
+    <div class="hero-search">
+      <input type="text" id="search-input" placeholder="Search by event or venue...">
+      <button class="btn" id="search-btn">Search</button>
+    </div>
+    <div class="chips" id="category-chips"></div>
+  </div>
+</section>
+
+<main class="container">
+  <div id="events-container" class="ticket-grid">
+    <p>Loading events...</p>
+  </div>
+</main>
+
+<footer class="site-footer">VenueBook &middot; a full-stack event booking demo</footer>
+
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+  renderNav('home');
+
+  const categories = ['all', 'workshop', 'concert', 'meetup', 'fest', 'general'];
+  let activeCategory = 'all';
+
+  function renderChips() {
+    const el = document.getElementById('category-chips');
+    el.innerHTML = categories.map(c =>
+      `<button class="chip ${c === activeCategory ? 'active' : ''}" data-cat="${c}">${c[0].toUpperCase() + c.slice(1)}</button>`
+    ).join('');
+    el.querySelectorAll('.chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeCategory = btn.dataset.cat;
+        renderChips();
+        loadEvents();
+      });
+    });
+  }
+
+  function ticketCardHtml(ev) {
+    const seatsLow = ev.available_seats > 0 && ev.available_seats <= Math.max(3, ev.total_seats * 0.1);
+    const soldOut = ev.available_seats <= 0;
+    return `
+      <a class="ticket" href="event.html?id=${ev.id}">
+        <div class="ticket-main">
+          <span class="ticket-tag">${ev.category}</span>
+          <h3>${ev.title}</h3>
+          <p class="ticket-meta">${formatDate(ev.event_date)}</p>
+          <p class="ticket-meta">${ev.venue}</p>
+          <p class="ticket-seats ${seatsLow || soldOut ? 'low' : ''}">
+            ${soldOut ? 'Sold out' : ev.available_seats + ' of ' + ev.total_seats + ' seats left'}
+          </p>
+        </div>
+        <div class="ticket-stub">
+          <span class="price">${formatPrice(ev.price)}</span>
+          <span class="price-label">per seat</span>
+        </div>
+      </a>
+    `;
+  }
+
+  async function loadEvents() {
+    const container = document.getElementById('events-container');
+    container.innerHTML = '<p>Loading events...</p>';
+    try {
+      const search = document.getElementById('search-input').value.trim();
+      let path = '/events?';
+      if (activeCategory !== 'all') path += `category=${encodeURIComponent(activeCategory)}&`;
+      if (search) path += `search=${encodeURIComponent(search)}`;
+
+      const data = await apiFetch(path);
+      if (data.events.length === 0) {
+        container.innerHTML = '<div class="empty-state">No events match yet. Try a different search or check back soon.</div>';
+        return;
+      }
+      container.innerHTML = data.events.map(ticketCardHtml).join('');
+    } catch (err) {
+      container.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  }
+
+  document.getElementById('search-btn').addEventListener('click', loadEvents);
+  document.getElementById('search-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loadEvents();
+  });
+
+  renderChips();
+  loadEvents();
+</script>
+</body>
+</html>

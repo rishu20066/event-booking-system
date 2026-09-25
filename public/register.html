@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign up - VenueBook</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="nav" id="site-nav"></header>
+
+<div class="form-card">
+  <h2>Create your account</h2>
+  <p style="font-size:0.9rem;">Sign up to start booking seats at events.</p>
+
+  <div id="form-alert"></div>
+
+  <form id="register-form">
+    <label for="name">Full name</label>
+    <input type="text" id="name" required>
+
+    <label for="email">Email</label>
+    <input type="email" id="email" required>
+
+    <label for="password">Password</label>
+    <input type="password" id="password" minlength="6" required>
+
+    <button type="submit" class="btn btn-gold btn-block" style="margin-top:22px;">Sign up</button>
+  </form>
+
+  <p class="form-note">Already have an account? <a href="login.html">Log in</a></p>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/nav.js"></script>
+<script>
+  renderNav('register');
+
+  document.getElementById('register-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const alertBox = document.getElementById('form-alert');
+    alertBox.innerHTML = '';
+
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+
+    try {
+      const data = await apiFetch('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ name, email, password })
+      });
+      saveSession(data.token, data.user);
+      window.location.href = 'index.html';
+    } catch (err) {
+      alertBox.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+    }
+  });
+</script>
+</body>
+</html>
